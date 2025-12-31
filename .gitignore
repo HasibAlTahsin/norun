@@ -27,3 +27,12 @@ squashfs-root/
 .vscode/
 .idea/
 
+
+# build artifacts
+dist/
+build/
+*.egg-info/
+AppDir/
+squashfs-root/
+*.AppImage
+packaging/tools/appimagetool

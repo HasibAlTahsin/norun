@@ -1,0 +1,58 @@
+name: Release (PyPI build + AppImage + GitHub Release)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build wheel + sdist
+        run: |
+          python -m build
+          ls -lah dist/
+
+      - name: Ensure packaging scripts are executable
+        run: |
+          chmod +x packaging/*.sh || true
+          chmod +x packaging/AppRun || true
+
+      # AppImage build often needs FUSE libs on ubuntu-latest
+      - name: Install AppImage runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse2 file
+
+      - name: Build AppImage
+        run: |
+          bash packaging/get_icon.sh
+          bash packaging/build_appimage.sh
+          ls -lah *.AppImage || true
+
+      - name: Create GitHub Release + Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            *.AppImage
+          generate_release_notes: true
