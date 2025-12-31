@@ -1,12 +1,29 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Build outputs
 dist/
 build/
-*.egg-info/
+*.whl
+*.tar.gz
 
-# AppImage
+# AppImage build artifacts
 AppDir/
+squashfs-root/
 *.AppImage
-packaging/tools/
+
+# OS/editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
 
