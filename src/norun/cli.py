@@ -15,7 +15,9 @@ from norun.core import (
     open_installer,
 )
 
-app = typer.Typer(help="NORUN - GUI+CLI Windows app runner (Wine + umu-run)")
+app = typer.Typer(help="NORUN - GUI+CLI Windows app runner (Wine + umu-run)",
+    add_completion=True,
+)
 
 
 @app.command()
