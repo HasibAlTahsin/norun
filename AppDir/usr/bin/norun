@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY="${PYTHON:-python3}"
+
+if ! command -v "${PY}" >/dev/null 2>&1; then
+  echo "python3 not found on host"
+  exit 1
+fi
+
+for d in "${HERE}"/usr/lib/python*/site-packages; do
+  if [[ -d "$d" ]]; then
+    export PYTHONPATH="$d:${PYTHONPATH:-}"
+    break
+  fi
+done
+
+exec "${PY}" -m norun.cli "$@"

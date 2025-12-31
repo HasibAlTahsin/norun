@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+NORUN="${HERE}/usr/bin/norun"
+
+if [[ ! -x "${NORUN}" ]]; then
+  echo "ERROR: norun launcher not found inside AppImage."
+  exit 1
+fi
+
+# No arguments → launch GUI
+if [[ "$#" -eq 0 ]]; then
+  exec "${NORUN}" gui
+fi
+
+# Arguments present → normal CLI
+exec "${NORUN}" "$@"
+

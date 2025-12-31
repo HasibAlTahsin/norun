@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.hasib.norun</id>
+  <name>NORUN</name>
+  <summary>GUI+CLI Windows app runner (Wine + umu-run)</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>NORUN helps you manage and run Windows apps using Wine or Proton (umu-run) with optional sandboxing.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.hasib.norun.desktop</launchable>
+
+  <!-- Put a real reachable URL here later; must be valid to avoid appstreamcli warnings -->
+  <url type="homepage">https://example.com/</url>
+</component>

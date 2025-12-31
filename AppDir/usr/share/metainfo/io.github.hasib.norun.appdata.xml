@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.hasib.norun</id>
+  <name>NORUN</name>
+  <summary>GUI+CLI Windows app runner (Wine + Proton)</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <launchable type="desktop-id">io.github.hasib.norun.desktop</launchable>
+  <description>
+    <p>Run Windows apps using Wine or Proton with optional sandboxing.</p>
+  </description>
+  <url type="homepage">https://example.com/</url>
+</component>

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY="${PYTHON:-python3}"
+if ! command -v "${PY}" >/dev/null 2>&1; then
+  echo "python3 not found on host. Please install Python 3."
+  exit 1
+fi
+
+PYVER="$("${PY}" -c 'import sys; print(f"python{sys.version_info[0]}.{sys.version_info[1]}")')"
+
+if [[ -d "${HERE}/usr/lib/${PYVER}/site-packages" ]]; then
+  export PYTHONPATH="${HERE}/usr/lib/${PYVER}/site-packages:${PYTHONPATH:-}"
+else
+  cand="$(ls -d "${HERE}/usr/lib/python"*"/site-packages" 2>/dev/null | head -n 1 || true)"
+  if [[ -n "${cand}" ]]; then
+    export PYTHONPATH="${cand}:${PYTHONPATH:-}"
+  fi
+fi
+
+exec "${PY}" -m norun.cli "$@"

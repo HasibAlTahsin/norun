@@ -1,0 +1,176 @@
+from pathlib import Path
+import os, shutil, subprocess, time
+from rich import print
+
+from norun.config import ensure_dirs, prefix_dir, save_config, load_config, LOG_DIR, CACHE_DIR, APPS_DIR
+from norun.profiles import PROFILES
+
+def _env_for(prefix: Path) -> dict:
+    env = os.environ.copy()
+    env["WINEPREFIX"] = str(prefix)
+    env.setdefault("WINEDEBUG", "-all")
+    env["DXVK_STATE_CACHE_PATH"] = str(CACHE_DIR / "dxvk")
+    env["VKD3D_SHADER_CACHE_PATH"] = str(CACHE_DIR / "vkd3d")
+    return env
+
+def _run(cmd, env=None, log_path: Path | None = None) -> int:
+    if log_path:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8", errors="ignore") as f:
+            f.write(f"\n\n$ {' '.join(cmd)}\n--- {time.ctime()} ---\n")
+            p = subprocess.Popen(cmd, env=env, stdout=f, stderr=f)
+            return p.wait()
+    return subprocess.call(cmd, env=env)
+
+
+def _autodetect_exe(prefix: Path) -> str:
+    """
+    Try to find a reasonable GUI exe inside common install locations.
+    Returns Windows path (C:\...) if found, else "".
+    """
+    drive_c = prefix / "drive_c"
+    candidates = []
+    for base in ["Program Files", "Program Files (x86)"]:
+        root = drive_c / base
+        if root.exists():
+            candidates += list(root.rglob("*.exe"))
+
+    # prefer common launcher names
+    prefer = ("7zFM.exe", "notepad++.exe", "app.exe", "launcher.exe")
+    def score(x: Path):
+        name = x.name.lower()
+        if any(name == p.lower() for p in prefer):
+            return (0, len(str(x)))
+        return (1, len(str(x)))
+
+    if not candidates:
+        return ""
+    best = sorted(candidates, key=score)[0]
+
+    # convert to windows path C:\...
+    rel = best.relative_to(drive_c)
+    win = "C:\\" + str(rel).replace("/", "\\")
+    return win
+
+def list_apps():
+    if not APPS_DIR.exists():
+        return []
+    return sorted([p.name for p in APPS_DIR.iterdir() if p.is_dir()])
+
+def doctor():
+    return {
+        "wine": bool(shutil.which("wine")),
+        "winetricks": bool(shutil.which("winetricks")),
+        "umu-run": bool(shutil.which("umu-run")),
+        "zenity": bool(shutil.which("zenity")),
+    }
+
+def create_app(name: str, profile: str, runner: str) -> dict:
+    ensure_dirs()
+    if profile not in PROFILES:
+        raise RuntimeError(f"Unknown profile: {profile} (choose from {', '.join(PROFILES)})")
+    if runner not in ("wine", "proton"):
+        raise RuntimeError("runner must be wine or proton")
+
+    pfx = prefix_dir(name)
+    pfx.mkdir(parents=True, exist_ok=True)
+    cfg = {
+        "name": name,
+        "profile": profile,
+        "runner": runner,
+        "prefix": str(pfx),
+        "last_exe": "",
+    }
+    save_config(name, cfg)
+    return cfg
+
+def init_prefix(cfg: dict):
+    pfx = Path(cfg["prefix"])
+    env = _env_for(pfx)
+    log = LOG_DIR / cfg["name"] / "install.log"
+
+    print("[green]Initializing prefix...[/green]")
+    _run(["wineboot", "-u"], env=env, log_path=log)
+
+    prof = PROFILES[cfg["profile"]]
+
+    print("[green]Setting Windows version...[/green]")
+    _run(["winetricks", "-q", prof["winver"]], env=env, log_path=log)
+
+    if prof["winetricks"]:
+        print(f"[green]Installing deps:[/green] {', '.join(prof['winetricks'])}")
+        _run(["winetricks", "-q", *prof["winetricks"]], env=env, log_path=log)
+
+    if prof["graphics"]:
+        print(f"[green]Enabling graphics:[/green] {', '.join(prof['graphics'])}")
+        _run(["winetricks", "-q", *prof["graphics"]], env=env, log_path=log)
+
+def install(cfg: dict, installer_path: str):
+    import glob
+    pfx = Path(cfg["prefix"])
+    env = _env_for(pfx)
+    log = LOG_DIR / cfg["name"] / "install.log"
+
+    # Expand ~ and resolve glob patterns like npp*.exe
+    raw = str(Path(installer_path).expanduser())
+    if any(ch in raw for ch in ["*", "?", "["]):
+        matches = sorted(glob.glob(raw))
+        if not matches:
+            raise RuntimeError(f"No installer matched pattern: {raw}")
+        raw = matches[0]
+
+    installer = str(Path(raw).resolve())
+
+    # Validate exists before running Wine
+    if not Path(installer).exists():
+        raise RuntimeError(f"Installer file not found: {installer}")
+
+    print(f"[green]Running installer:[/green] {installer}")
+    rc = _run(["wine", installer], env=env, log_path=log)
+    if rc != 0:
+        raise RuntimeError(f"Installer failed ({rc}). See: {log}")
+
+def run_app(name: str, exe: str | None = None):
+    cfg = load_config(name)
+    if not cfg:
+        raise RuntimeError("App not found. Use: norun add ...")
+
+    pfx = Path(cfg["prefix"])
+    env = _env_for(pfx)
+    log = LOG_DIR / name / "run.log"
+    target = exe or cfg.get("last_exe") or ""
+    if not target:
+        guessed = _autodetect_exe(pfx)
+        if guessed:
+            target = guessed
+            cfg["last_exe"] = target
+            save_config(name, cfg)
+        else:
+            raise RuntimeError(
+                "No EXE provided and couldn't auto-detect. "
+                "Use: norun run <app> --exe \"C:\\Path\\app.exe\""
+            )
+cfg["last_exe"] = target
+    save_config(name, cfg)
+
+    if cfg["runner"] == "wine":
+        print(f"[cyan]Running with Wine:[/cyan] {target}")
+        rc = _run(["wine", target], env=env, log_path=log)
+        if rc != 0:
+            raise RuntimeError(f"Run failed ({rc}). See: {log}")
+        return
+
+    # proton via umu-run
+    if not shutil.which("umu-run"):
+        raise RuntimeError("umu-run not found. Install umu-launcher first.")
+
+    unix_path = target
+    if ":" in target and "\\" in target:
+        conv = subprocess.run(["winepath", "-u", target], env=env, capture_output=True, text=True)
+        if conv.returncode == 0 and conv.stdout.strip():
+            unix_path = conv.stdout.strip()
+
+    print(f"[cyan]Running with Proton (umu-run):[/cyan] {unix_path}")
+    rc = _run(["umu-run", unix_path], env=env, log_path=log)
+    if rc != 0:
+        raise RuntimeError(f"Run failed ({rc}). See: {log}")
